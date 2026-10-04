@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetTriage — Network Traffic Triage Tool</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
+</head>
+<body>
+  <!-- Header & Navigation -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">NetTriage</h1>
+          <p class="brand-subtitle">Network Traffic Triage &amp; Investigation Tool</p>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="badge badge-privacy" title="Client-Side Only">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          100% In-Browser Analysis
+        </span>
+        <span class="badge badge-soc">SOC Analyst Training</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notice & Privacy Banners -->
+  <div class="container notices-container">
+    <div class="notice-box notice-privacy" role="status">
+      <div class="notice-icon" aria-hidden="true">🔒</div>
+      <div class="notice-content">
+        <strong>Privacy Guarantee:</strong> Your packet capture data is analysed locally in your browser and is not uploaded anywhere. No servers, no AI APIs, no cookies, and no telemetry are used.
+      </div>
+    </div>
+    <div class="notice-box notice-disclaimer" role="note">
+      <div class="notice-icon" aria-hidden="true">⚠️</div>
+      <div class="notice-content">
+        <strong>Educational Disclaimer:</strong> Educational network triage tool. Alerts indicate activity worth investigating and do not prove malicious behaviour. Only analyse traffic from systems and networks you own or are authorised to monitor.
+      </div>
+    </div>
+  </div>
+
+  <main class="container main-content">
+    <!-- Top Row: File Ingestion & Settings -->
+    <section class="section-card upload-section">
+      <div class="card-header">
+        <h2>1. Ingest Packet Capture (CSV)</h2>
+        <span class="step-desc">Exported from Wireshark</span>
+      </div>
+
+      <div class="upload-grid">
+        <!-- Drag & Drop Area -->
+        <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Upload Wireshark CSV file">
+          <input type="file" id="fileInput" accept=".csv,text/csv" class="visually-hidden">
+          <div class="drop-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p class="drop-title">Upload Wireshark CSV</p>
+          <p class="drop-hint">Drag &amp; drop your exported packet list CSV here, or <span class="highlight">browse</span></p>
+          <span class="drop-types">Supports standard Wireshark CSV exports (No., Time, Source, Destination, Protocol, Length, Info)</span>
+        </div>
+
+        <!-- Demo Data & Fast Actions -->
+        <div class="demo-actions-card">
+          <h3 class="panel-subtitle">Quick Demo Datasets</h3>
+          <p class="demo-desc">Load realistic fictional traffic captures to test triage detection rules instantly:</p>
+          <div class="demo-btn-group">
+            <button type="button" id="btnDemoNormal" class="btn btn-demo">
+              <span class="btn-indicator normal"></span>
+              <strong>Load Normal Sample</strong>
+              <small>Ordinary traffic (0 alerts expected)</small>
+            </button>
+            <button type="button" id="btnDemoHighVolume" class="btn btn-demo">
+              <span class="btn-indicator warning"></span>
+              <strong>Load High Volume Sample</strong>
+              <small>One host &gt; 50 packets (Rule 1 trigger)</small>
+            </button>
+            <button type="button" id="btnDemoMixedLab" class="btn btn-demo">
+              <span class="btn-indicator alert"></span>
+              <strong>Load Mixed SOC Lab</strong>
+              <small>Scanning, ICMP spike &amp; repeated sessions</small>
+            </button>
+          </div>
+          <button type="button" id="btnClearData" class="btn btn-outline-danger btn-sm mt-3" style="display: none;">
+            Clear Current Capture
+          </button>
+        </div>
+      </div>
+
+      <!-- Ingestion Status Bar -->
+      <div id="fileStatusBar" class="file-status-bar" style="display: none;">
+        <div class="status-main">
+          <span id="demoDataBadge" class="badge badge-demo" style="display: none;">Demo Data</span>
+          <span class="file-name-label">File: <strong id="statusFileName">—</strong></span>
+          <span class="file-count-label">Packets: <strong id="statusPacketCount">0</strong></span>
+          <span id="statusParseState" class="status-tag success">Parsed Successfully</span>
+        </div>
+        <div id="missingFieldsWarning" class="missing-fields-warning" style="display: none;"></div>
+      </div>
+    </section>
+
+    <!-- Threshold Settings Panel -->
+    <section class="section-card settings-section">
+      <div class="collapsible-header" id="settingsToggle" role="button" tabindex="0" aria-expanded="false">
+        <div class="header-with-badge">
+          <h2>2. Detection Rule Thresholds</h2>
+          <span class="badge badge-subtle">Configurable Engine</span>
+        </div>
+        <span class="toggle-icon" aria-hidden="true">▼</span>
+      </div>
+      <div id="settingsBody" class="settings-content" style="display: none;">
+        <div class="settings-info-box">
+          <strong>Analyst Note:</strong> Thresholds should be adjusted based on the environment. A busy server may legitimately generate thousands of packets, while the same activity from an ordinary workstation might deserve investigation. These numbers are educational defaults, not universal security constants.
+        </div>
+        <form id="thresholdsForm" class="thresholds-grid">
+          <div class="threshold-field">
+            <label for="threshHighVolume">
+              Rule 1: Packets per source
+              <span class="tooltip-icon" title="Flags source IP addresses exceeding this packet count">ⓘ</span>
+            </label>
+            <input type="number" id="threshHighVolume" min="1" max="100000" value="50">
+            <span class="field-hint">Default: 50 packets</span>
+          </div>
+
+          <div class="threshold-field">
+            <label for="threshUniqueDest">
+              Rule 2: Unique destinations (Host Scan)
+              <span class="tooltip-icon" title="Flags a host contacting more than this number of distinct IP addresses">ⓘ</span>
+            </label>
+            <input type="number" id="threshUniqueDest" min="2" max="10000" value="10">
+            <span class="field-hint">Default: 10 destinations</span>
+          </div>
+
+          <div class="threshold-field">
+            <label for="threshUniquePorts">
+              Rule 3: Unique ports on single target (Port Scan)
+              <span class="tooltip-icon" title="Best-effort detection from Info column destination ports">ⓘ</span>
+            </label>
+            <input type="number" id="threshUniquePorts" min="2" max="5000" value="10">
+            <span class="field-hint">Default: 10 ports</span>
+          </div>
+
+          <div class="threshold-field">
+            <label for="threshIcmp">
+              Rule 4: ICMP packets per source
+              <span class="tooltip-icon" title="Flags unusually high ping / ICMP volume">ⓘ</span>
+            </label>
+            <input type="number" id="threshIcmp" min="1" max="10000" value="30">
+            <span class="field-hint">Default: 30 packets</span>
+          </div>
+
+          <div class="threshold-field">
+            <label for="threshDns">
+              Rule 5: DNS queries per source
+              <span class="tooltip-icon" title="Flags unusually high volume of DNS lookup traffic">ⓘ</span>
+            </label>
+            <input type="number" id="threshDns" min="1" max="10000" value="30">
+            <span class="field-hint">Default: 30 packets</span>
+          </div>
+
+          <div class="threshold-field">
+            <label for="threshRepeatedPair">
+              Rule 6: Repeated Source-to-Destination
+              <span class="tooltip-icon" title="Flags heavy persistent communication between a specific IP pair">ⓘ</span>
+            </label>
+            <input type="number" id="threshRepeatedPair" min="2" max="100000" value="40">
+            <span class="field-hint">Default: 40 packets</span>
+          </div>
+
+          <div class="threshold-field">
+            <label for="threshTcpSyn">
+              Rule 7: TCP SYN count per source
+              <span class="tooltip-icon" title="Detected if TCP flags or [SYN] are exposed in the Info field">ⓘ</span>
+            </label>
+            <input type="number" id="threshTcpSyn" min="1" max="10000" value="20">
+            <span class="field-hint">Default: 20 SYN packets</span>
+          </div>
+
+          <div class="threshold-actions">
+            <button type="button" id="btnApplyThresholds" class="btn btn-primary">Apply &amp; Re-analyse</button>
+            <button type="button" id="btnResetThresholds" class="btn btn-secondary">Reset Defaults</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Empty State Prompt -->
+    <section id="emptyState" class="empty-state-card">
+      <div class="empty-state-inner">
+        <div class="empty-icon" aria-hidden="true">📡</div>
+        <h3>No Network Capture Loaded</h3>
+        <p>Upload a Wireshark CSV packet list or click one of the demo buttons above to generate an instant triage report.</p>
+        <div class="empty-tips">
+          <span>💡 Tip: Click <strong>"Load Mixed SOC Lab"</strong> to see a full triage analysis with active alerts.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Active Analysis Results Container -->
+    <div id="resultsContainer" style="display: none;">
+      <!-- Investigation Priority Score -->
+      <section class="section-card score-section">
+        <div class="score-card-layout">
+          <div class="score-main">
+            <span class="score-label">Triage Priority Score</span>
+            <div class="score-num-wrap">
+              <span id="scoreValue" class="score-value">0</span>
+              <span class="score-max">pts</span>
+            </div>
+            <div id="scoreBadge" class="score-badge badge-routine">Routine Activity</div>
+            <p class="score-note">
+              Scoring is fully transparent and additive. It represents <em>investigative priority</em> for a SOC analyst, not a mathematical certainty of malicious intent.
+            </p>
+          </div>
+          <div class="score-breakdown-card">
+            <h4>Score Contributors</h4>
+            <ul id="scoreBreakdownList" class="score-breakdown-list">
+              <li class="empty-breakdown">No elevated activity triggers observed.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Network Overview KPI Cards -->
+      <section class="overview-grid">
+        <div class="kpi-card">
+          <span class="kpi-title">Total Packets</span>
+          <span id="kpiTotalPackets" class="kpi-val">0</span>
+          <span class="kpi-sub">Frames parsed</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-title">Source Hosts</span>
+          <span id="kpiSourceHosts" class="kpi-val">0</span>
+          <span class="kpi-sub">Unique sender IPs</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-title">Destination Hosts</span>
+          <span id="kpiDestHosts" class="kpi-val">0</span>
+          <span class="kpi-sub">Unique receiver IPs</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-title">Most Active Source</span>
+          <span id="kpiTopSource" class="kpi-val mono">—</span>
+          <span id="kpiTopSourceCount" class="kpi-sub">0 packets</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-title">Most Contacted Dest</span>
+          <span id="kpiTopDest" class="kpi-val mono">—</span>
+          <span id="kpiTopDestCount" class="kpi-sub">0 packets</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-title">Top Protocol</span>
+          <span id="kpiTopProtocol" class="kpi-val">—</span>
+          <span id="kpiAvgLength" class="kpi-sub">Avg len: 0 B</span>
+        </div>
+      </section>
+
+      <!-- Triage Alerts Section -->
+      <section class="section-card alerts-section" id="alertsSection">
+        <div class="card-header">
+          <div class="header-with-badge">
+            <h2>3. Triage Findings &amp; Alerts</h2>
+            <span id="alertsCountBadge" class="badge badge-pill">0 Alerts</span>
+          </div>
+          <span class="step-desc">Rule-based, explainable observations</span>
+        </div>
+
+        <!-- Filter & Search Bar -->
+        <div class="filters-toolbar">
+          <div class="filter-group">
+            <label for="filterSeverity">Severity:</label>
+            <select id="filterSeverity">
+              <option value="ALL">All Severities</option>
+              <option value="High">High Priority</option>
+              <option value="Medium">Medium Priority</option>
+              <option value="Low">Low Priority</option>
+              <option value="Informational">Informational</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filterSourceIp">Source IP:</label>
+            <select id="filterSourceIp">
+              <option value="ALL">All Sources</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filterDestIp">Dest IP:</label>
+            <select id="filterDestIp">
+              <option value="ALL">All Destinations</option>
+            </select>
+          </div>
+
+          <div class="filter-group search-group">
+            <label for="filterSearchText">Search:</label>
+            <input type="text" id="filterSearchText" placeholder="Search IP, rule, protocol...">
+          </div>
+
+          <button type="button" id="btnResetFilters" class="btn btn-sm btn-secondary">Clear Filters</button>
+        </div>
+
+        <!-- Alerts Container -->
+        <div id="alertsContainer" class="alerts-container">
+          <!-- Dynamically populated alert cards -->
+        </div>
+      </section>
+
+      <!-- Host Rankings & Protocol Visualisation -->
+      <div class="analytics-grid">
+        <!-- Top Source Hosts -->
+        <section class="section-card">
+          <div class="card-header">
+            <h3>Top Source Hosts</h3>
+            <span class="badge badge-subtle">Top 10 Senders</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="topSourcesTable">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Source Host</th>
+                  <th class="text-right">Packets</th>
+                  <th>Volume Proportion</th>
+                </tr>
+              </thead>
+              <tbody id="topSourcesBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Top Destination Hosts -->
+        <section class="section-card">
+          <div class="card-header">
+            <h3>Top Destinations</h3>
+            <span class="badge badge-subtle">Top 10 Receivers</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="topDestinationsTable">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Destination Host</th>
+                  <th class="text-right">Packets</th>
+                  <th>Volume Proportion</th>
+                </tr>
+              </thead>
+              <tbody id="topDestinationsBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Protocol Distribution Visualisation -->
+      <section class="section-card">
+        <div class="card-header">
+          <h3>Protocol Distribution</h3>
+          <span class="badge badge-subtle">Observed Protocols Only</span>
+        </div>
+        <p class="section-desc">Visual distribution of traffic protocols observed in this capture:</p>
+        <div id="protocolBarsContainer" class="protocol-bars-container">
+          <!-- Dynamically populated pure CSS/JS bar chart -->
+        </div>
+      </section>
+
+      <!-- Raw Packets Table (Inspectable) -->
+      <section class="section-card">
+        <div class="collapsible-header" id="rawPacketsToggle" role="button" tabindex="0" aria-expanded="false">
+          <div class="header-with-badge">
+            <h3>Packet Log Viewer (<span id="rawPacketCountLabel">0</span>)</h3>
+            <span class="badge badge-subtle">Inspect Rows</span>
+          </div>
+          <span class="toggle-icon" aria-hidden="true">▼</span>
+        </div>
+        <div id="rawPacketsBody" style="display: none;" class="mt-3">
+          <div class="table-toolbar">
+            <input type="text" id="packetSearchInput" placeholder="Filter packet rows by text or IP..." class="input-search">
+            <span id="packetFilterMatchCount" class="badge badge-subtle">Showing all</span>
+          </div>
+          <div class="table-responsive packet-table-wrap">
+            <table class="data-table packet-table" id="packetsTable">
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>Time</th>
+                  <th>Source</th>
+                  <th>Destination</th>
+                  <th>Protocol</th>
+                  <th>Length</th>
+                  <th>Info</th>
+                </tr>
+              </thead>
+              <tbody id="packetsTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Educational Section: How to Think Like an Analyst -->
+    <section class="section-card educational-section">
+      <div class="card-header">
+        <h2>How to Think Like an Analyst</h2>
+        <span class="badge badge-soc">Core SOC Methodology</span>
+      </div>
+      <div class="analyst-quote-banner">
+        <blockquote>
+          "An anomaly is a starting point for investigation, not proof of compromise. Detection tells an analyst where to look. Investigation determines what actually happened."
+        </blockquote>
+      </div>
+
+      <div class="analyst-steps-grid">
+        <div class="step-card">
+          <div class="step-num">01</div>
+          <h4>Observe Unusual Behaviour</h4>
+          <p>Notice deviations in packet counts, host fan-out, protocol usage, or timing bursts.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">02</div>
+          <h4>Identify Source &amp; Destination</h4>
+          <p>Determine host roles: Is this a workstation, a domain controller, a default gateway, or external?</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">03</div>
+          <h4>Determine Involved Protocol</h4>
+          <p>Examine the protocol: Is it expected for this host role? Is it plaintext (HTTP) or encrypted (TLS)?</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">04</div>
+          <h4>Establish if Activity is Expected</h4>
+          <p>Check business context: Scheduled backups, IT vulnerability scans, or software updates often mimic attacks.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">05</div>
+          <h4>Look for Supporting Indicators</h4>
+          <p>Correlate: Did the scanning host follow up with authenticated SMB or SSH logins? Are errors generated?</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">06</div>
+          <h4>Correlate with Other Telemetry</h4>
+          <p>Consult endpoint logs (EDR/Sysmon), firewall logs, and authentication servers to complete the picture.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">07</div>
+          <h4>Decide Action &amp; Document</h4>
+          <p>Conclude: Mark as benign expected activity, tune monitoring rules, or escalate for incident containment.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Wireshark Capture Instructions Section -->
+    <section class="section-card guide-section">
+      <div class="card-header">
+        <h2>Wireshark Capture &amp; Export Guide</h2>
+        <span class="badge badge-subtle">Step-by-Step</span>
+      </div>
+      <div class="guide-grid">
+        <div class="guide-step">
+          <span class="guide-badge">Step 1</span>
+          <h4>Open Wireshark</h4>
+          <p>Launch Wireshark on your system and choose your active network interface (Ethernet or Wi-Fi).</p>
+        </div>
+        <div class="guide-step">
+          <span class="guide-badge">Step 2</span>
+          <h4>Capture Authorised Traffic</h4>
+          <p>Start the capture. <em>Only monitor traffic from devices and networks you own or have explicit authorisation to test.</em></p>
+        </div>
+        <div class="guide-step">
+          <span class="guide-badge">Step 3</span>
+          <h4>Stop the Capture</h4>
+          <p>Click the red square button to stop recording once you have captured the target activity.</p>
+        </div>
+        <div class="guide-step">
+          <span class="guide-badge">Step 4</span>
+          <h4>Export as CSV</h4>
+          <p>In Wireshark's menu, click: <br><code>File → Export Packet Dissections → As CSV...</code></p>
+        </div>
+        <div class="guide-step">
+          <span class="guide-badge">Step 5</span>
+          <h4>Upload to NetTriage</h4>
+          <p>Drag the exported <code>.csv</code> file into the upload zone above to view your triage report!</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <div class="container footer-content">
+      <div>
+        <strong>NetTriage</strong> — Educational Network Traffic Triage Tool
+      </div>
+      <div class="footer-sub">
+        All processing runs client-side inside your browser. No telemetry or server storage.
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
